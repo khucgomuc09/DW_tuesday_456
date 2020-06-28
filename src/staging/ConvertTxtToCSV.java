@@ -18,7 +18,7 @@ public class ConvertTxtToCSV {
 		read = new BufferedReader(new FileReader(text));
 		String line;
 		while ((line = read.readLine()) != null) {
-			output.add(line.replaceAll("\\|", ","));
+			output.add(line.replaceAll("\\|", ",").replaceAll("\t", ","));
 		}
 		read.close();
 
@@ -45,5 +45,5 @@ public class ConvertTxtToCSV {
 			e.printStackTrace();
 		}
 	}
-	
+
 }
