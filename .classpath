@@ -7,7 +7,6 @@
 	</classpathentry>
 	<classpathentry kind="src" path="chilkat-9.5.0-jdk11-x64"/>
 	<classpathentry kind="src" path="src"/>
-	<classpathentry exported="true" kind="lib" path="poi/chilkat.jar"/>
 	<classpathentry exported="true" kind="lib" path="poi/commons-collections4-4.4.jar"/>
 	<classpathentry exported="true" kind="lib" path="poi/commons-compress-1.19.jar"/>
 	<classpathentry exported="true" kind="lib" path="poi/mysql-connector-java-8.0.15.jar"/>
@@ -15,5 +14,8 @@
 	<classpathentry exported="true" kind="lib" path="poi/poi-ooxml-4.1.2.jar"/>
 	<classpathentry exported="true" kind="lib" path="poi/poi-ooxml-schemas-4.1.2.jar"/>
 	<classpathentry exported="true" kind="lib" path="poi/xmlbeans-3.1.0.jar"/>
+	<classpathentry kind="lib" path="chilkat-9.5.0-jdk11-x64/chilkat.jar"/>
+	<classpathentry kind="lib" path="poi/mail-1.4.7.jar"/>
+	<classpathentry kind="lib" path="poi/activation-2.2.1.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>
