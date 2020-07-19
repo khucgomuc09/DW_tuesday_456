@@ -7,7 +7,6 @@ import java.sql.SQLException;
 public class DBConnection {
 	private static Connection connect=null;
 	public static Connection getConnectionControl() throws SQLException, ClassNotFoundException {
-//		String url = "jdbc:mysql://localhost:3306/databasecontrol?useUnicode=true&characterEncoding=utf-8";
 		String url = "jdbc:mysql://localhost/databasecontrol?"
 				+ "useUnicode=true&useJDBCCompliantTimezoneShift=true&"
 				+ "useLegacyDatetimeCode=false&serverTimezone=UTC&characterEncoding=UTF-8";
