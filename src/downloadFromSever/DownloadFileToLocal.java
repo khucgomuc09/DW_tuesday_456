@@ -12,8 +12,8 @@ import javax.mail.Authenticator;
 import javax.mail.Message;
 import javax.mail.MessagingException;
 import javax.mail.PasswordAuthentication;
-import javax.mail.Transport;
 import javax.mail.Session;
+import javax.mail.Transport;
 import javax.mail.internet.InternetAddress;
 import javax.mail.internet.MimeMessage;
 
@@ -21,7 +21,6 @@ import com.chilkatsoft.CkGlobal;
 import com.chilkatsoft.CkScp;
 import com.chilkatsoft.CkSocket;
 import com.chilkatsoft.CkSsh;
-//import com.mysql.cj.Session;
 
 import connectionDB.DBConnection;
 
@@ -36,12 +35,12 @@ public class DownloadFileToLocal {
 		}
 	}
 
-	public static boolean downloadFile() throws SQLException, ClassNotFoundException, IOException {
+	public static boolean downloadFile(String id) throws SQLException, ClassNotFoundException, IOException {
 		Connection conn = DBConnection.getConnectionControl();
-		String sql = "select * from myconfig";
+		String sql = "select * from myconfig where id=" + id;
 		PreparedStatement pre = conn.prepareStatement(sql);
 		ResultSet rs = pre.executeQuery();
-		rs.isBeforeFirst();
+		rs.beforeFirst();
 		while (rs.next()) {
 			String mail_Recieved = rs.getString("mail_Recieved");
 
@@ -102,14 +101,14 @@ public class DownloadFileToLocal {
 
 			success = scp.SyncTreeDownload(remoteDir, localDir, mode, bRecurse);
 
-			System.out.println("SCP download matching success.");
 			if (success != true) {
 				System.out.println(scp.lastErrorText());
 				sendMailWithTSL(mail_Recieved,
 						"Connection failed because file_Name_Config or extension or remote_DirSever or local_Dir wrong");
 				return false;
 			}
-			logs();
+			System.out.println("SCP download matching success.");
+			logs(id);
 			ssh.Disconnect();
 
 		}
@@ -119,10 +118,12 @@ public class DownloadFileToLocal {
 		return true;
 	}
 
-	public static void logs() throws ClassNotFoundException, SQLException, IOException {
+	public static void logs(String id) throws ClassNotFoundException, SQLException, IOException {
 		Connection conn = DBConnection.getConnectionControl();
-		String sql = "select * from myconfig";
-
+		String sql = "select local_Dir from myconfig";
+		String timedownload = "now()";
+		String status = "ER";
+		String selectfilename = "select 1 from log where file_name=?";
 		PreparedStatement pre = conn.prepareStatement(sql);
 		ResultSet rs = null;
 		rs = pre.executeQuery();
@@ -130,40 +131,35 @@ public class DownloadFileToLocal {
 		while (rs.next()) {
 			String dirlocal = rs.getString("local_Dir");
 			File folder = new File(dirlocal);
+
 			if (!folder.exists()) {
 				System.out.println("folder not exists!");
 			} else {
 				File[] listfile = folder.listFiles();
-				int idconf = rs.getInt("id");
-				String timedownload = "now()";
-				String status = "ER";
-				String selectfilename = "select * from log";
-				PreparedStatement prep = conn.prepareStatement(selectfilename);
-				ResultSet rss = prep.executeQuery();
-				rss.beforeFirst();
-
 				for (File file : listfile) {
 					boolean isExist = false;
+					System.out.println(isExist);
 					String filename = file.getName();
 					// check exist
-					while (rss.next()) {
-						String fileNameInLog = rss.getString("file_Name");
-						if (filename.equals(fileNameInLog)) {
-							System.out.println(fileNameInLog + " existed");
-							isExist = true;
-							break;
-						} else {
-							isExist = false;
-						}
+					PreparedStatement prep = conn.prepareStatement(selectfilename);
+					prep.setString(1, filename);
+					ResultSet rss = prep.executeQuery();
+					if (rss.next()) {
+						isExist = true;
 					}
-					if (!isExist) {
+
+					System.out.println("after: " + isExist);
+					if (isExist == false) {
 						// insert logs
-						String sqlInsert = "insert into log values(null," + idconf + "," + "'" + filename + "'" + ","
+						String sqlInsert = "insert into log values(null," + id + "," + "'" + filename + "',null,"
 								+ timedownload + "," + "'" + dirlocal + "'" + "," + "'" + status + "'" + "," + "null"
-								+ ",null,null" + ")";
-						System.out.println(sqlInsert);
+								+ ",null" + ")";
 						PreparedStatement preinsert = conn.prepareStatement(sqlInsert);
 						preinsert.execute();
+						System.out.println(sqlInsert);
+					} else {
+						System.out.println(filename + " existed");
+						continue;
 					}
 				}
 			}
@@ -202,6 +198,7 @@ public class DownloadFileToLocal {
 	}
 
 	public static void main(String argv[]) throws ClassNotFoundException, SQLException, IOException {
-		downloadFile();
+//		downloadFile("3");
+		logs("1");
 	}
 }
