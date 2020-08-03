@@ -37,7 +37,7 @@ public class ExtractFile {
 	static File error = new File("src//error//error.txt");
 	static BufferedWriter out;
 	static String field = null;
-	static int countField = 0;
+	static int countField = 0, countLine = 0;
 
 	public ExtractFile() {
 		try {
@@ -48,12 +48,12 @@ public class ExtractFile {
 	}
 
 	// 1.Connect to staging
-	public static Connection connectStaging() {
+	public static Connection connectStaging(int id) {
 		Connection connectionControl;
 		Connection connect = null;
 		try {
 			connectionControl = DBConnection.getConnectionControl();
-			String sqlControl = "select * from myconfig";
+			String sqlControl = "select * from myconfig where id=" + id;
 			PreparedStatement preSource = connectionControl.prepareStatement(sqlControl);
 			ResultSet rsSource = preSource.executeQuery();
 			while (rsSource.next()) {
@@ -63,7 +63,9 @@ public class ExtractFile {
 				pass_source = rsSource.getString("password_Source");
 				field = rsSource.getString("fields");
 			}
+
 			connect = DBConnection.getConnection(jdbcURL_source, userName_source, pass_source);
+
 		} catch (ClassNotFoundException | SQLException e) {
 			e.printStackTrace();
 		}
@@ -71,35 +73,24 @@ public class ExtractFile {
 	}
 
 	// 2.Load file from local to staging
-	public void staging() throws Exception {
+	public static void staging(int idConfig) throws Exception {
 //		0.kết nối xuống mycofig lấy field để tạo header table
 		Connection connectionControl = DBConnection.getConnectionControl();
-		Connection connect = connectStaging();
+		Connection connect = connectStaging(idConfig);
 
 		String fields[] = field.split(",");
 		for (int i = 0; i < fields.length; i++) {
 			fields[i] = fields[i].replace(" ", "_");
 			countField++;
 		}
-
-		// 1. Kiểm tra xem table đã tồn tại trong staging hay chưa?
-		DatabaseMetaData checkTable = (DatabaseMetaData) connect.getMetaData();
-		ResultSet tables = checkTable.getTables(null, null, nameTable, null);
-		// 1.1. Nếu tồn tại thì thông báo Table exist
-		if (tables.next()) {
-			System.out.println("Table ex");
-		} else {
-			// 1.2. Table không tồn tại thì tạo table với tên staging
-			createTableStudent();
-		}
-		// end check table
+		System.out.println(countField);
 
 		// 1. kết nối xuống table logs trong database control
 		int id;
 		Date time_download, time_staging;
-		String status_download, status_staging, fileName, dir_local;
+		String status, fileName, dir_local;
 //		Connection connectionControl = DBConnection.getConnectionControl();
-		String sqlLogs = "select * from log  LIMIT 1";
+		String sqlLogs = "SELECT * FROM `log` JOIN myconfig ON log.idConfig=myconfig.id WHERE log.idConfig=" + idConfig;
 		PreparedStatement pre = connectionControl.prepareStatement(sqlLogs);
 		ResultSet rs = pre.executeQuery();
 		while (rs.next()) {
@@ -108,9 +99,9 @@ public class ExtractFile {
 			time_staging = rs.getDate("time_Staging");
 			fileName = rs.getNString("file_Name");
 			System.out.println("name:" + fileName);
-			status_download = rs.getNString("status_Download");
-			status_staging = rs.getNString("status_Staging");
-			System.out.println("status: " + status_download);
+			status = rs.getNString("status");
+//			status_staging = rs.getNString("status_Staging");
+			System.out.println("status: " + status);
 			dir_local = rs.getNString("dir_Local");
 
 //		2. Kiểm tra file trong logs có tồn tại trong local hay k?
@@ -122,15 +113,15 @@ public class ExtractFile {
 				System.out.println(pathlocal + " không tồn tại");
 
 //			2.1Nếu không tồn tại thì set lại trường status trong logs là "ERROR"
-				String sqlSetERROR = "Update log set status_download = 'ERROR',status_Staging = 'ERROR' , time_staging = NOW() "
-						+ "where idLogs" + " = " + id;
+				String sqlSetERROR = "Update log set status= 'ERROR' , time_staging = NOW() " + " where idLogs" + " = "
+						+ id;
 				System.out.println(sqlSetERROR);
 				pre = connectionControl.prepareStatement(sqlSetERROR);
 				pre.executeUpdate();
 			} else {
 				System.out.println("tồn taji");
 				// status ok
-				if (status_download.equals("ER")) {
+				if (status.equals("ER")) {
 					System.out.println("ok");
 					// đọc name ra.xlsx convert load or load
 					String lsFileName[] = fileName.split("\\.");
@@ -139,37 +130,68 @@ public class ExtractFile {
 						System.out.println("txt " + fileName);
 						ConvertTxtToCSV conTxt = new ConvertTxtToCSV();
 						conTxt.convertFileTxtToCSV(fileLocal);
-						loadTxtCsv(pathlocal, countField);
+//						loadTxtCsv(pathlocal, countField);
+						String list = loadTxtCsv(pathlocal, countField);
+						if (list != "") {
+							System.out.println(list);
+							String query = "INSERT INTO " + nameTable + " VALUES " + list;
+							System.out.println(query);
+							PreparedStatement insert = connect.prepareStatement(query);
+							countLine += insert.executeUpdate();
 //						2.2: load success set status_staging and now() is SUCCESS
-						String sqlSetSuccess = "Update log set status_Staging = 'SUCCESS' , time_staging = NOW() "
-								+ "where idLogs" + " = " + id;
-						System.out.println(sqlSetSuccess);
-						pre = connectionControl.prepareStatement(sqlSetSuccess);
-						pre.executeUpdate();
+							String sqlSetSuccess = "Update log set status = 'SUCCESS' , time_staging = NOW(),number_row_success= "
+									+ countLine + " where idLogs" + " = " + id;
+							System.out.println(sqlSetSuccess);
+							pre = connectionControl.prepareStatement(sqlSetSuccess);
+							pre.executeUpdate();
+						} else {
+							System.out.println("File không có dữ liệu đúng");
+						}
 
 					} else if (lsFileName[1].equals("csv")) {
-						loadTxtCsv(pathlocal, countField);
+						String list = loadTxtCsv(pathlocal, countField);
+						System.out.println(list);
+						if (list != "") {
+							String query = "INSERT INTO " + nameTable + " VALUES " + list;
+							System.out.println(query);
+							PreparedStatement insert = connect.prepareStatement(query);
+							countLine += insert.executeUpdate();
 //						2.2: load success set status_staging and now() is SUCCESS
-						String sqlSetSuccess = "Update log set status_Staging = 'SUCCESS' , time_staging = NOW() "
-								+ "where idLogs" + " = " + id;
-						System.out.println(sqlSetSuccess);
-						pre = connectionControl.prepareStatement(sqlSetSuccess);
-						pre.executeUpdate();
+							String sqlSetSuccess = "Update log set status = 'SUCCESS' , time_staging = NOW() "
+									+ "where idLogs" + " = " + id;
+							System.out.println(sqlSetSuccess);
+							pre = connectionControl.prepareStatement(sqlSetSuccess);
+							pre.executeUpdate();
+						} else {
+							System.out.println("File không có dữ liệu đúng");
+						}
 //						nếu là file xlsx thi thực hiện loadXlsx
 					} else if (lsFileName[1].equals("xlsx")) {
-//						loadXlsx(pathlocal);
+//						
+						String list = loadXlsx(pathlocal, countField);
+						System.out.println(list);
+						String query = "INSERT INTO " + nameTable + " VALUES " + list;
+						System.out.println(query);
+						PreparedStatement insert = connect.prepareStatement(query);
+						countLine += insert.executeUpdate();
 //						2.2: load success set status_staging and now() is SUCCESS
-						String sqlSetSuccess = "Update log set status_Staging = 'SUCCESS' , time_staging = NOW() "
-								+ "where idLogs" + " = " + id;
+						String sqlSetSuccess = "Update log set status = 'SUCCESS' , time_staging = NOW(),number_row_success= "
+								+ countLine + " where idLogs " + " = " + id;
 						System.out.println(sqlSetSuccess);
 						pre = connectionControl.prepareStatement(sqlSetSuccess);
 						pre.executeUpdate();
 						System.out.println("xlsx");
 					}
-				} else if (!status_download.equals("ER")) {
+					if (countLine <= 0) {
+						String sqlSetSuccess = "Update log set status = 'ERROR' , time_staging = NOW(),number_row_success= "
+								+ countLine + " where idLogs " + " = " + id;
+						pre = connectionControl.prepareStatement(sqlSetSuccess);
+						pre.executeUpdate();
+					}
+				} else if (status.equals("ERROR")) {
 					System.out.println("File not exx");
-					String sqlSetERROR = "Update log set status_download = 'ERROR',status_Staging = 'ERROR' , time_staging = NOW() "
-							+ "where idLogs" + " = " + id;
+					String sqlSetERROR = "Update log set status= 'ERROR' , time_staging = NOW() " + "where idLogs"
+							+ " = " + id;
 					System.out.println(sqlSetERROR);
 					pre = connectionControl.prepareStatement(sqlSetERROR);
 					pre.executeUpdate();
@@ -178,42 +200,43 @@ public class ExtractFile {
 		}
 	}
 
-	// 3.Read file text and file csv
-	public void loadTxtCsv(String nameFile, int number_column) throws Exception {
-//		1.connect database staging
-		Connection connect = connectStaging();
-		System.out.println("Connect DB Successfully :)");
-
+	// 3.Đọc file text và file csv
+	public static String loadTxtCsv(String nameFile, int number_column) throws Exception {
+		// 1.Đọc file theo từng dòng
 		BufferedReader lineReader = new BufferedReader(
 				new InputStreamReader(new FileInputStream(nameFile), Charset.forName("UTF-8")));
-//		4.đọc bỏ qua dòng header
 		String lineText = null;
+		// 2.Bỏ phần header
 		lineText = lineReader.readLine();
-//		int countField = 0;
-//
-//		String fields[] = field.split(",");
-//		for (int i = 0; i < fields.length; i++) {
-//			fields[i] = fields[i].replace(" ", "_");
-//			countField++;
-//		}
+		// 3.Đếm số dòng đủ dữ liệu các trường
+//		countLine = 0;
+		int sss = 0;
 
 		String list = "";
+		// 4.Trong khi dữ liệu không bằng null
+		System.out.println(countField);
 		while ((lineText = lineReader.readLine()) != null) {
-			System.out.println(lineText);
+//			System.out.println(lineText);
+			// 4.1. Cắt chuỗi theo dấu , hoặc |
 			StringTokenizer tokenizer = new StringTokenizer(lineText, ",|");
-			// ktra có bao nhiêu trường trên dòng
-			if (tokenizer.countTokens() < countField) {
-				String text = nameFile + " không đủ dữ liệu các trường";
-				out.write(text + "\n");
-				out.flush();
+			// 4.2. Kiểm tra chuỗi vừa cắt có đủ dữ liệu các trường
+			if (tokenizer.countTokens() < (number_column - 1)) {
+				// 4.2.1. Nếu không đủ thì thông báo k đủ dữ liệu
+//				String text = nameFile + " không đủ dữ liệu các trường";
+//				out.write(text + "\n");
+//				out.flush();
 				System.out.println(nameFile + " không đủ dữ liệu các trường");
 				continue;
 			} else {
-				list += "('";
-				System.out.println(tokenizer.countTokens());
+				// 4.2.2. Nếu đủ thì tăng countLine
+				sss++;
+//				countLine++;
+				list += "(null,'";
+//				System.out.println(tokenizer.countTokens());
 				while (tokenizer.hasMoreElements()) {
+					// 4.2.3.Nếu tổng số tokenizer bằng 1
 					if (tokenizer.countTokens() == 1) {
-						System.out.println("voooooo");
+//						System.out.println("voooooo");
 						list += tokenizer.nextToken() + "'";
 					} else {
 						list += tokenizer.nextToken() + "','";
@@ -223,181 +246,109 @@ public class ExtractFile {
 				System.out.println("list student: " + list);
 			}
 		}
-		list = list.substring(0, list.lastIndexOf(","));
+		// 6.Bỏ dấu phẩy ở cuối
+		if (sss > 0)
+			list = list.substring(0, list.lastIndexOf(","));
+		else
+			System.out.println("Tất cả dòng trong file đều sai");
 		System.out.println(list);
-		String query = "INSERT INTO " + nameTable + " VALUES " + list;
-		System.out.println(query);
-		PreparedStatement pre = connect.prepareStatement(query);
-		pre.execute();
+
+		return list;
 	}
 
-	// 4.Read file excel
-	public void loadXlsx(String nameFile, int number_column) throws IOException, SQLException, ClassNotFoundException {
-		Connection connect = connectStaging();
-		System.out.println("Connect DB Successfully :)");
-
+	// 4.Đọc file excel
+	public static String loadXlsx(String nameFile, int number_column)
+			throws IOException, SQLException, ClassNotFoundException {
+		// 1. Đọc nội dung file
 		FileInputStream fileInStream = new FileInputStream(nameFile);
-		// 9.2.1: Mở xlsx và lấy trang tính yêu cầu từ bảng tính
+		// 2. Mở xlsx và lấy trang tính yêu cầu từ bảng tính
 		XSSFWorkbook workBook = new XSSFWorkbook(fileInStream);
+		// 3. Lấy sheet thứ nhất
 		XSSFSheet selSheet = workBook.getSheetAt(0);
 
-		// 9.2.2: Lặp qua tất cả các hàng trong trang tính đã chọn
+		// 4: Lặp qua tất cả các hàng trong trang tính đã chọn
 		Iterator<Row> rowIterator = selSheet.iterator();
-		List<String> listStudents = new ArrayList<String>();
+		// 5: Tạo list chứa tất cả các student
+		List<String> list = new ArrayList<String>();
 
-		String list = "";
+		String listItem = "";
 		while (rowIterator.hasNext()) {
 			int temp = 0;
 			Row row = rowIterator.next();
-
 			// 9.2.3: Lặp qua tất cả các cột trong hàng và xây dựng "," tách chuỗi
-
 			Iterator<Cell> cellIterator = row.cellIterator();
-			// System.out.println(" count " +selSheet.getRow(0).getLastCellNum());
-			if (selSheet.getRow(0).getLastCellNum() == number_column) {
-				list = "(Null,";
-				// System.out.println("row " + row);
+			Cell cell = null;
+			if (selSheet.getRow(0).getLastCellNum() == (number_column - 1)) {
+				listItem = "(Null,";
 				// while (cellIterator.hasNext()) {
-				while (temp < number_column) {
+				while (temp < number_column - 1) {
 					temp++;
 					if (cellIterator.hasNext()) {
 
-						Cell cell = cellIterator.next();
-						// System.out.println("cell " + cell);
+						cell = cellIterator.next();
 						switch (cell.getCellType()) {
 
 						case STRING:
 							String value = "";
 							value = cell.getStringCellValue().replaceAll("'", "");
-							// System.out.println(value);
-							list += "'" + value + "'";
+							listItem += "'" + value + "'";
 							break;
 						case NUMERIC:
-							list += "'" + cell.getNumericCellValue() + "'";
+							listItem += "'" + cell.getNumericCellValue() + "'";
 							break;
 						case BOOLEAN:
-							list += "'" + cell.getBooleanCellValue() + "'";
+							listItem += "'" + cell.getBooleanCellValue() + "'";
+							break;
+						case _NONE:
+							listItem += "'null'";
+							break;
+						case BLANK:
+							listItem += "'null'";
+							break;
+						case ERROR:
+							listItem += "'null'";
+							break;
+						case FORMULA:
+							listItem += "'null'";
 							break;
 
 						default:
-							list += "Null";
+							listItem += "'null'";
 							break;
 						}
-						if (cell.getColumnIndex() == number_column - 1) {
+						if (cell.getColumnIndex() == number_column - 2) {
 							// bỏ dấu phẩy cuối
+////							list = list.substring(0, list.lastIndexOf(","));
+							listItem += "";
 						} else
-							list += ",";
+							listItem += ",";
 					} else
-						list += "Null";
+						listItem += "'null'";
 				}
-				list += ")\n";
-				listStudents.add(list);
-//				System.out.println(listStudents.toString());
+				listItem += ")\n";
+				System.out.println(listItem);
+				list.add(listItem);
 			}
 		}
 		// 9.2.4: Bỏ phần header
-		listStudents.remove(0);
-		// 9.2.5: Add tất cả sinh viên theo định dạng câu lệnh insert sql
-		String sql_students = "";
-		for (int i = 0; i < listStudents.size(); i++) {
-			sql_students += listStudents.get(i) + ",";
-		}
-		sql_students = sql_students.substring(0, sql_students.lastIndexOf(","));
+		list.remove(0);
 
-		System.out.println(sql_students);
+		// 9.2.5: Add tất cả sinh viên theo định dạng câu lệnh insert sql
+		String sqlList = "";
+		for (int i = 0; i < list.size(); i++) {
+			String[] arr = list.get(i).split(",");
+			if (arr[1].contains("'null'")) {
+				list.remove(list.get(i));
+				break;
+			}
+			sqlList += list.get(i) + ",";
+		}
+		sqlList = sqlList.substring(0, sqlList.lastIndexOf(","));
+
+		System.out.println(sqlList);
 		// 9.2.6: Đóng file
 		workBook.close();
-		System.out.println("List ST: " + sql_students);
-		String query = "INSERT INTO " + nameTable + " VALUES" + sql_students;
-		System.out.println(query);
-		PreparedStatement pre = connect.prepareStatement(query);
-		pre.execute();
-		System.out.println("excel file");
-	}
-
-	// 5.Convert date to yyyy-mm-dd
-	public static String parseDate(String date) {
-		if (date != null && !date.isEmpty()) {
-			SimpleDateFormat format[] = new SimpleDateFormat[] { new SimpleDateFormat("dd/MM/yyyy"),
-					new SimpleDateFormat("dd-MM-yyyy"), new SimpleDateFormat("MM/dd/yyyy"),
-					new SimpleDateFormat("MM-dd-yyyy") };
-			SimpleDateFormat result = new SimpleDateFormat("yyyy-MM-dd");
-			Date parsedDate = null;
-			for (int i = 0; i < format.length; i++) {
-				try {
-					format[i].setLenient(false);
-					parsedDate = format[i].parse(date);
-					return result.format(parsedDate);
-				} catch (ParseException e) {
-					continue;
-				}
-			}
-
-		}
-		return date;
-	}
-
-	// 6.Create table student
-	public static void createTableStudent() throws ClassNotFoundException, SQLException {
-		Connection connectionControl = DBConnection.getConnectionControl();
-		String sqlControl = "select * from myconfig";
-		PreparedStatement preSource = connectionControl.prepareStatement(sqlControl);
-		ResultSet rsSource = preSource.executeQuery();
-		String field = null;
-		while (rsSource.next()) {
-			nameTable = rsSource.getString("table_Name_Staging");
-			jdbcURL_source = rsSource.getString("url_Source");
-			userName_source = rsSource.getString("username_Source");
-			pass_source = rsSource.getString("password_Source");
-			field = rsSource.getString("fields");
-		}
-		System.out.println(nameTable);
-		System.out.println(jdbcURL_source);
-		System.out.println(userName_source);
-		System.out.println(pass_source);
-		System.out.println(field);
-
-		String fields[] = field.split(",");
-		for (int i = 0; i < fields.length; i++) {
-			fields[i] = fields[i].replace(" ", "_");
-		}
-
-		// bvconnect db staging create table
-		Connection connect = DBConnection.getConnection(jdbcURL_source, userName_source, pass_source);
-		System.out.println("Connect DB Successfully :)");
-
-		// load fields
-		String f = "";
-		String primary = fields[0];
-		for (int i = 1; i < fields.length; i++) {
-			if (i == fields.length - 1) {
-				f += fields[i] + " CHAR(50)";
-			} else {
-				f += fields[i] + " CHAR(50),";
-			}
-		}
-
-//		String sql = "CREATE table " + nameTable + "(" + fields[0] + " INT NOT NULL AUTO_INCREMENT ," + fields[1]
-//				+ " CHAR(50)," + fields[2] + " CHAR(50)," + fields[3] + " CHAR(50)," + fields[4] + " CHAR(50),"
-//				+ fields[5] + " CHAR(50)," + fields[6] + " CHAR(50)," + fields[7] + " CHAR(50)," + fields[8]
-//				+ " CHAR(50)," + fields[9] + " CHAR(50)," + fields[10] + " CHAR(50),  PRIMARY KEY (" + fields[0] + "))";
-		String sql = "CREATE table " + nameTable + "(" + fields[0] + " INT NOT NULL AUTO_INCREMENT ," + f
-				+ ",  PRIMARY KEY (" + primary + "))";
-		System.out.println(sql);
-		PreparedStatement preparedStatement = connect.prepareStatement(sql);
-		preparedStatement.execute();
-	}
-
-	public static void main(String[] args) {
-//		String date = "15-08-1999";
-//		System.out.println(date);
-//		System.out.println(parseDate(date));
-		String file = "src\\staging\\2003.xlsx";
-		ExtractFile dm = new ExtractFile();
-		try {
-			dm.loadXlsx(file, 6);
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
+//		System.out.println("List ST: " + sql_students);
+		return sqlList;
 	}
 }

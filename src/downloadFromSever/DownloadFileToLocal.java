@@ -198,6 +198,11 @@ public class DownloadFileToLocal {
 	}
 
 	public static void main(String argv[]) throws ClassNotFoundException, SQLException, IOException {
+<<<<<<< HEAD
+//		downloadFile("3");
+		logs("1");
+=======
 		downloadFile("3");
+>>>>>>> 889284d54d7b38eb12680c810228223ce107c7e6
 	}
 }
