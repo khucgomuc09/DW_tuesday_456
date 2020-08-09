@@ -72,11 +72,9 @@ public class ExtractFile {
 //		1. Kết nối tới databaseControll
 		Connection connectionControl = DBConnection.getConnectionControl();
 
-		// 4. Lấy dữ liệu các field, thực hiện cắt field bởi dấu phẩy, sử dụng biến
-		// countField để đếm tổng số field.
-
-		// 5. Kết nối tới database Staging
+		// 4. Kết nối tới database Staging
 		Connection connect = connectStaging(idConfig);
+		// 5. Lấy dữ liệu các field, thực hiện cắt field bởi dấu phẩy, sử dụng biến
 		String fields[] = field.split(",");
 		countField = 0;
 		for (int i = 0; i < fields.length; i++) {
