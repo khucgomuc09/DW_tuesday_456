@@ -26,16 +26,8 @@ import connectionDB.DBConnection;
 
 public class DownloadFileToLocal {
 
-	static {
-		try {
-			System.loadLibrary("chilkat");
-		} catch (UnsatisfiedLinkError e) {
-			System.err.println("library failed to load.\n" + e);
-			System.exit(1);
-		}
-	}
-
 	public static boolean downloadFile(String id) throws SQLException, ClassNotFoundException, IOException {
+		//connect DB  (1)
 		Connection conn = DBConnection.getConnectionControl();
 		String sql = "select * from myconfig where id=" + id;
 		PreparedStatement pre = conn.prepareStatement(sql);
@@ -43,12 +35,20 @@ public class DownloadFileToLocal {
 		rs.beforeFirst();
 		while (rs.next()) {
 			String mail_Recieved = rs.getString("mail_Recieved");
+			//load library (2)
+			try {
+				System.loadLibrary("chilkat");
+			} catch (UnsatisfiedLinkError e) {
+				System.err.println("library failed to load.\n" + e);
+				sendMailWithTSL(mail_Recieved, "library failed to load"); //(3) 
+				System.exit(1);
+			}
 
-			// unlock ckglobal
+			// unlock ckglobal 
 			CkGlobal glob = new CkGlobal();
-			boolean globsuccess = glob.UnlockBundle("unlocked");
+			boolean globsuccess = glob.UnlockBundle("unlocked"); //(5)
 			if (globsuccess != true) {
-				sendMailWithTSL(mail_Recieved, "Connection failed because ckGlobal locked");
+				sendMailWithTSL(mail_Recieved, "Connection failed because ckGlobal locked"); //(6)
 				System.out.println(glob.lastErrorText());
 				return false;
 			}
@@ -61,54 +61,56 @@ public class DownloadFileToLocal {
 			CkSsh ssh = new CkSsh();
 			CkSocket cksocket = new CkSocket();
 			System.out.println(cksocket.lastErrorText());
-			// Connect to an SSH server:
-			String hostname = rs.getString("sever_Address"); // drive.ecepvn.org
-			int port = rs.getInt("port_Sever");// 2227
-			boolean success = ssh.Connect(hostname, port);
+			// Connect to server:
+			String hostname = rs.getString("sever_Address"); // drive.ecepvn.org //(4)
+			int port = rs.getInt("port_Sever");// 2227 //(4)
+			boolean success = ssh.Connect(hostname, port); //(5)
 			if (success != true) {
 				System.out.println(ssh.lastErrorText());
-				sendMailWithTSL(mail_Recieved, "Connection failed because sever_Address or port_Sever wrong");
+				sendMailWithTSL(mail_Recieved, "Connection failed because sever_Address or port_Sever wrong"); //(6)
 				return false;
 			}
 			// Wait a max of 5 seconds when reading responses..
 			ssh.put_IdleTimeoutMs(5000);
-			String usernamesever = rs.getString("username_Sever");// "guest_access";
-			String passSever = rs.getString("password_Sever");// "123456";
+			String usernamesever = rs.getString("username_Sever");// "guest_access"; //(4)
+			String passSever = rs.getString("password_Sever");// "123456"; //(4)
 			// Authenticate using login/password:
-			success = ssh.AuthenticatePw(usernamesever, passSever);
+			success = ssh.AuthenticatePw(usernamesever, passSever); //(5)
 			if (success != true) {
-				System.out.println(ssh.lastErrorText());
-				sendMailWithTSL(mail_Recieved, "Connection failed because username_Sever or password_Sever wrong");
+				System.out.println(ssh.lastErrorText()); 
+				sendMailWithTSL(mail_Recieved, "Connection failed because username_Sever or password_Sever wrong"); //(6)
 				return false;
 			}
 			CkScp scp = new CkScp();
 			scp.put_HeartbeatMs(200);
 
-			success = scp.UseSsh(ssh);
+			success = scp.UseSsh(ssh); //(5)
 			if (success != true) {
-				sendMailWithTSL(mail_Recieved, "Connection failed because ssh have problem");
+				sendMailWithTSL(mail_Recieved, "Connection failed because ssh have problem"); //(6)
 				System.out.println(scp.lastErrorText());
 				return false;
 			}
 			int mode = 6;
-			boolean bRecurse = false;
+			// Do not recurse the remote directory tree.  Only download files matching *.pem
+		    // from the given remote directory.
+			boolean bRecurse = false; //(5)
 
-			String filenameconf = rs.getString("file_Name_Config");// + rs.getString(7);// "*.txt";
-			String extension = rs.getString("extension");// + rs.getString(7);// "*.txt";
-			scp.put_SyncMustMatch(filenameconf + "." + extension);
-			String remoteDir = rs.getString("remote_DirSever");// "/volume1/ECEP/song.nguyen/DW_2020/data";
-			String localDir = rs.getString("local_Dir");// "C:\\Users\\Admin\\Downloads\\datawarehouse";
+			String filenameconf = rs.getString("file_Name_Config");// + rs.getString(7);// "*.txt"; //(4)
+			String extension = rs.getString("extension");// + rs.getString(7);// "*.txt"; //(4)
+			scp.put_SyncMustMatch(filenameconf + "." + extension); //(4)
+			String remoteDir = rs.getString("remote_DirSever");// "/volume1/ECEP/song.nguyen/DW_2020/data"; //(4)
+			String localDir = rs.getString("local_Dir");// "C:\\Users\\Admin\\Downloads\\datawarehouse"; //(4)
 
-			success = scp.SyncTreeDownload(remoteDir, localDir, mode, bRecurse);
+			success = scp.SyncTreeDownload(remoteDir, localDir, mode, bRecurse);//(5)
 
 			if (success != true) {
 				System.out.println(scp.lastErrorText());
-				sendMailWithTSL(mail_Recieved,
+				sendMailWithTSL(mail_Recieved, //(5)
 						"Connection failed because file_Name_Config or extension or remote_DirSever or local_Dir wrong");
 				return false;
 			}
 			System.out.println("SCP download matching success.");
-			logs(id);
+			logs(id); //(7)
 			ssh.Disconnect();
 
 		}
@@ -119,11 +121,12 @@ public class DownloadFileToLocal {
 	}
 
 	public static void logs(String id) throws ClassNotFoundException, SQLException, IOException {
+	// connect DB
 		Connection conn = DBConnection.getConnectionControl();
-		String sql = "select local_Dir from myconfig";
-		String timedownload = "now()";
-		String status = "ER";
-		String selectfilename = "select 1 from log where file_name=?";
+		String sql = "select local_Dir from myconfig"; //(7)
+		String timedownload = "now()"; //(7)
+		String status = "ER"; //(7)
+		String selectfilename = "select 1 from log where file_name=?"; //(7)
 		PreparedStatement pre = conn.prepareStatement(sql);
 		ResultSet rs = null;
 		rs = pre.executeQuery();
@@ -132,24 +135,25 @@ public class DownloadFileToLocal {
 			String dirlocal = rs.getString("local_Dir");
 			File folder = new File(dirlocal);
 
-			if (!folder.exists()) {
+			if (!folder.exists()) { // check folder exists 
 				System.out.println("folder not exists!");
 			} else {
 				File[] listfile = folder.listFiles();
-				for (File file : listfile) {
+				for (File file : listfile) { // select each file in list file //(7)
 					boolean isExist = false;
-					System.out.println(isExist);
-					String filename = file.getName();
+//					System.out.println(isExist);
+					String filename = file.getName(); //get name file in folder //(7)
 					// check exist
 					PreparedStatement prep = conn.prepareStatement(selectfilename);
-					prep.setString(1, filename);
+					prep.setString(1, filename);// get name file in log //(7)
 					ResultSet rss = prep.executeQuery();
 					if (rss.next()) {
 						isExist = true;
+//						continue;
 					}
 
-					System.out.println("after: " + isExist);
-					if (isExist == false) {
+//					System.out.println("after: " + isExist);
+					if (isExist == false) {// insert log if file not exist in log //(8)
 						// insert logs
 						String sqlInsert = "insert into log values(null," + id + "," + "'" + filename + "',null,"
 								+ timedownload + "," + "'" + dirlocal + "'" + "," + "'" + status + "'" + "," + "null"
@@ -158,8 +162,7 @@ public class DownloadFileToLocal {
 						preinsert.execute();
 						System.out.println(sqlInsert);
 					} else {
-						System.out.println(filename + " existed");
-						continue;
+						System.out.println(filename + " existed"); //(9)
 					}
 				}
 			}
@@ -167,8 +170,8 @@ public class DownloadFileToLocal {
 	}
 
 	public static boolean sendMailWithTSL(String mail_received, String bodyMail) {
-		String mail = "tn6876977@gmail.com";
-		String pass = "Datawarehouse123";
+		final String mail = "tn6876977@gmail.com";
+		final String pass = "Datawarehouse123";
 		Properties props = new Properties();
 		props.put("mail.smtp.auth", "true");
 		props.put("mail.smtp.starttls.enable", "true");
@@ -197,17 +200,12 @@ public class DownloadFileToLocal {
 		return true;
 	}
 
-	public static void main(String argv[]) throws ClassNotFoundException, SQLException, IOException {
-//<<<<<<< HEAD
-////		downloadFile("3");
-//		logs("1");
-//=======
-//		downloadFile("3");
-//<<<<<<< HEAD
-////		logs("1");
-////		downloadFile("3");
-//=======
-//>>>>>>> 889284d54d7b38eb12680c810228223ce107c7e6
-//>>>>>>> a904260f942f7b5ccea84d992df994921322ccf9
+	public static void main(String[] args) {
+		try {
+//			logs(1+"");
+			downloadFile("" + 1);
+		} catch (ClassNotFoundException | SQLException | IOException e) {
+			e.printStackTrace();
+		}
 	}
 }
