@@ -75,6 +75,8 @@ public class ExtractFile {
 		// 4. Kết nối tới database Staging
 		Connection connect = connectStaging(idConfig);
 		// 5. Lấy dữ liệu các field, thực hiện cắt field bởi dấu phẩy, sử dụng biến
+		// countField để đếm tổng số field.
+
 		String fields[] = field.split(",");
 		countField = 0;
 		for (int i = 0; i < fields.length; i++) {
