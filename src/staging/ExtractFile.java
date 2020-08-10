@@ -74,6 +74,7 @@ public class ExtractFile {
 
 		// 4. Kết nối tới database Staging
 		Connection connect = connectStaging(idConfig);
+		System.out.println("Connect database staging success");
 		// 5. Lấy dữ liệu các field, thực hiện cắt field bởi dấu phẩy, sử dụng biến
 		// countField để đếm tổng số field.
 
@@ -89,6 +90,9 @@ public class ExtractFile {
 		ResultSet rs = pre.executeQuery();
 		// Lấy dữ liệu của các cột: id, time_download, time_staging, fileName, status,
 		// dir_local.
+		if (rs.getRow() == 0) {
+			System.out.println("không có file trong table log");
+		}
 		while (rs.next()) {
 			id = rs.getInt("idLogs");
 			time_download = rs.getDate("time_Download");
@@ -142,15 +146,15 @@ public class ExtractFile {
 							pre = connectionControl.prepareStatement(sqlSetSuccess);
 							pre.executeUpdate();
 							// Nếu file không insert được hàng nào vào staging
-							if (countLine <= 0) {
-								System.out.println("File không có dữ liệu đúng");
-								System.out.println("----------------------------------------------------");
-								// 10.6: Update status là error, time_staging là thời giạn hiện tại
-								String sqlSetERROR = "Update log set status= 'ERROR' , time_staging = NOW() "
-										+ "where idLogs" + " = " + id;
-								pre = connectionControl.prepareStatement(sqlSetERROR);
-								pre.executeUpdate();
-							}
+						}
+						if (countLine <= 0) {
+							System.out.println("File không có dữ liệu đúng");
+							System.out.println("----------------------------------------------------");
+							// 10.6: Update status là error, time_staging là thời giạn hiện tại
+							String sqlSetERROR = "Update log set status= 'ERROR' , time_staging = NOW() "
+									+ "where idLogs" + " = " + id;
+							pre = connectionControl.prepareStatement(sqlSetERROR);
+							pre.executeUpdate();
 						}
 						// 11. Nếu là file xlsx
 					} else if (lsFileName[1].equals("xlsx")) {
@@ -160,7 +164,7 @@ public class ExtractFile {
 						// list
 						String list = loadXlsx(pathlocal, countField);
 //						System.out.println(list);
-						if (list != "") {
+						if (list != null) {
 							// 10.3: insert vào nametable với dữ liệu là list
 							String query = "INSERT INTO " + nameTable + " VALUES " + list;
 							System.out.println(query);
@@ -174,6 +178,7 @@ public class ExtractFile {
 							System.out.println("Loaf file " + fileName + " thành công với " + countLine + " dòng");
 							pre = connectionControl.prepareStatement(sqlSetSuccess);
 							pre.executeUpdate();
+
 							if (countLine <= 0) {
 								System.out.println("File không có dữ liệu đúng");
 								System.out.println("----------------------------------------------------");
@@ -183,6 +188,11 @@ public class ExtractFile {
 								pre = connectionControl.prepareStatement(sqlSetERROR);
 								pre.executeUpdate();
 							}
+						} else {
+							String sqlSetERROR = "Update log set status= 'ERROR' , time_staging = NOW() "
+									+ "where idLogs" + " = " + id;
+							pre = connectionControl.prepareStatement(sqlSetERROR);
+							pre.executeUpdate();
 						}
 					} else if (!(lsFileName[1].equals("txt")) || !(lsFileName[1].equals("csv"))
 							|| !(lsFileName[1].equals("xlsx"))) {
@@ -210,8 +220,8 @@ public class ExtractFile {
 					System.out.println("----------------------------------------------------");
 				}
 			}
-		}
 
+		}
 	}
 
 	// 3.Đọc file text và file csv
@@ -281,63 +291,90 @@ public class ExtractFile {
 			// 6: Lặp qua tất cả các cột trong hàng
 			Iterator<Cell> cellIterator = row.cellIterator();
 			Cell cell = null;
-			if (selSheet.getRow(0).getLastCellNum() == (number_column - 1)) {
-				listItem = "(Null,";
-				// 7. Kiểm tra nếu còn dữ liệu
-				while (temp < number_column - 1) {
-					temp++;
-					if (cellIterator.hasNext()) {
-						// 8. Thêm dữ liệu vào listItem theo định dạng các shell
-						cell = cellIterator.next();
-						switch (cell.getCellType()) {
-						case STRING:
-							String value = "";
-							value = cell.getStringCellValue().replaceAll("'", "");
-							listItem += "'" + value + "'";
-							break;
-						case NUMERIC:
-							listItem += "'" + cell.getNumericCellValue() + "'";
-							break;
-						case BOOLEAN:
-							listItem += "'" + cell.getBooleanCellValue() + "'";
-							break;
+//			System.out.println(selSheet.getRow(0).getLastCellNum());
+			try {
 
-						default:
+				if (selSheet.getRow(0).getLastCellNum() == (number_column - 1)) {
+					listItem = "(Null,";
+					// 7. Kiểm tra nếu còn dữ liệu
+					while (temp < number_column - 1) {
+						temp++;
+						if (cellIterator.hasNext()) {
+							// 8. Thêm dữ liệu vào listItem theo định dạng các shell
+							cell = cellIterator.next();
+							switch (cell.getCellType()) {
+							case STRING:
+								String value = "";
+								value = cell.getStringCellValue().replaceAll("'", "");
+								listItem += "'" + value + "'";
+								break;
+							case NUMERIC:
+								listItem += "'" + cell.getNumericCellValue() + "'";
+								break;
+							case BOOLEAN:
+								listItem += "'" + cell.getBooleanCellValue() + "'";
+								break;
+							default:
+								listItem += "'null'";
+								break;
+							}
+							if (cell.getColumnIndex() == number_column - 2) {
+								// 9. bỏ dấu phẩy shell cuối
+//							listItem += "";
+							} else
+								listItem += ",";
+						} else {
 							listItem += "'null'";
-							break;
+							if (cell.getColumnIndex() == number_column - 2) {
+								// 9. bỏ dấu phẩy shell cuối
+								listItem += "";
+							} else
+								listItem += ",";
 						}
-						if (cell.getColumnIndex() == number_column - 2) {
-							// 9. bỏ dấu phẩy shell cuối
-							listItem += "";
-						} else
-							listItem += ",";
-					} else
-						listItem += "'null'";
+
+					}
+					//Bỏ dấu phẩy ở cuối dòng
+					listItem = listItem.substring(0, listItem.length() - 1);
+					if (listItem.endsWith("'"))
+						listItem += ")\n";
+					else
+						listItem += "')\n";
+
+					// 10. thêm từng hàng vào trong danh sách
+					list.add(listItem);
+				} else if (selSheet.getRow(0).getLastCellNum() != (number_column - 1)
+						|| selSheet.getRow(0).getFirstCellNum() == 0) {
+					System.out.println("Không đọc được file");
+					return null;
 				}
-				listItem += ")\n";
-				// 10. thêm từng hàng vào trong danh sách
-				list.add(listItem);
+			} catch (Exception e) {
+				System.out.println("Không đọc được file");
 			}
 		}
-		// 11: Bỏ phần header
-		list.remove(0);
-
-		// 12: Add tất cả sinh viên theo định dạng câu lệnh insert sql, nếu có dòng null
-		// thì xóa dòng đó khỏi danh sách
 		String sqlList = "";
-		for (int i = 0; i < list.size(); i++) {
-			String[] arr = list.get(i).split(",");
-			if (arr[1].contains("'null'")) {
-				list.remove(list.get(i));
-				break;
-			}
-			sqlList += list.get(i) + ",";
-		}
-		//13.Bỏ dấu phẩy ở cuối danh sách dữ liệu
-		sqlList = sqlList.substring(0, sqlList.lastIndexOf(","));
+		if (!list.isEmpty()) {
+			// 11: Bỏ phần header
+			list.remove(0);
 
+			// 12: Add tất cả sinh viên theo định dạng câu lệnh insert sql, nếu có dòng null
+			// thì xóa dòng đó khỏi danh sách
+			for (int i = 0; i < list.size(); i++) {
+				String[] arr = list.get(i).split(",");
+				if (arr[1].contains("'null'")) {
+					list.remove(list.get(i));
+					break;
+				}
+				sqlList += list.get(i) + ",";
+			}
+			// 13.Bỏ dấu phẩy ở cuối danh sách dữ liệu
+			sqlList = sqlList.substring(0, sqlList.lastIndexOf(","));
+
+		} else {
+			return null;
+		}
 		// 14: Đóng file, trả về danh sách dữ liệu
 		workBook.close();
 		return sqlList;
+//		}
 	}
 }
