@@ -124,7 +124,7 @@ public class ExtractFile {
 						// 10.1: Convert các kí tự đặc biệt(| \t) trong file về dấu ,
 						ConvertTxtToCSV conTxt = new ConvertTxtToCSV();
 						conTxt.convertFileTxtToCSV(fileLocal);
-						// 10.2: Đọc file txt với số trường đếm được và lưu vào list
+						// 10.2: Đọc file bằng hàm loadTxtCsv() với số trường đếm được và lưu vào list
 						String list = loadTxtCsv(pathlocal, countField);
 						if (list != "") {
 							// 10.3: insert vào nametable của database Staging với dữ liệu là list
@@ -156,7 +156,8 @@ public class ExtractFile {
 					} else if (lsFileName[1].equals("xlsx")) {
 						countLine = 0;
 						System.out.println(countField);
-						// 11.1: Đọc file txt với số trường đếm được và lưu vào list
+						// 11.1: Đọc file xlsx bằng hàm loadXlsx() với số trường đếm được và lưu vào
+						// list
 						String list = loadXlsx(pathlocal, countField);
 //						System.out.println(list);
 						if (list != "") {
@@ -226,7 +227,6 @@ public class ExtractFile {
 
 		String list = "";
 		// 4.Trong khi dữ liệu không bằng null
-//		System.out.println(countField);
 		while ((lineText = lineReader.readLine()) != null) {
 			// 4.1. Cắt chuỗi theo dấu , hoặc |
 			StringTokenizer tokenizer = new StringTokenizer(lineText, ",|");
@@ -235,11 +235,12 @@ public class ExtractFile {
 				// 4.2.1. Nếu không đủ thì tiếp tục chay dòng khác
 				continue;
 			} else {
-				// 4.2.2. Nếu đủ thì tăng countLine
+				// 4.2.2. Nếu đủ thì tăng count, tạo biến list để chứa danh sách dữ liệu
 				count++;
 				list += "(null,'";
+				// 4.2.3. Thêm dữ liệu vào list
 				while (tokenizer.hasMoreElements()) {
-					// 4.2.3.Nếu tổng số tokenizer bằng 1
+					// Nếu tổng số tokenizer bằng 1
 					if (tokenizer.countTokens() == 1) {
 						list += tokenizer.nextToken() + "'";
 					} else {
@@ -249,20 +250,19 @@ public class ExtractFile {
 				list += "),";
 			}
 		}
-		// 6.Bỏ dấu phẩy ở cuối
+		// 5.Bỏ dấu phẩy ở cuối danh sách dữ liệu
 		if (count > 0)
 			list = list.substring(0, list.lastIndexOf(","));
 		else
 			System.out.println("Tất cả dòng trong file đều sai");
-		System.out.println(list);
-
+		// 6. Trả về danh sách dữ liệu
 		return list;
 	}
 
 	// 4.Đọc file excel
 	public static String loadXlsx(String nameFile, int number_column)
 			throws IOException, SQLException, ClassNotFoundException {
-		// 1. Đọc nội dung file
+		// 1. Đọc dữ liệu trong file
 		FileInputStream fileInStream = new FileInputStream(nameFile);
 		// 2. Mở xlsx và lấy trang tính yêu cầu từ bảng tính
 		XSSFWorkbook workBook = new XSSFWorkbook(fileInStream);
@@ -273,23 +273,23 @@ public class ExtractFile {
 		Iterator<Row> rowIterator = selSheet.iterator();
 		// 5: Tạo list chứa tất cả các dòng
 		List<String> list = new ArrayList<String>();
-
+		// tạo listItem chứa 1 dòng
 		String listItem = "";
 		while (rowIterator.hasNext()) {
 			int temp = 0;
 			Row row = rowIterator.next();
-			// 9.2.3: Lặp qua tất cả các cột trong hàng và xây dựng "," tách chuỗi
+			// 6: Lặp qua tất cả các cột trong hàng
 			Iterator<Cell> cellIterator = row.cellIterator();
 			Cell cell = null;
 			if (selSheet.getRow(0).getLastCellNum() == (number_column - 1)) {
 				listItem = "(Null,";
+				// 7. Kiểm tra nếu còn dữ liệu
 				while (temp < number_column - 1) {
 					temp++;
 					if (cellIterator.hasNext()) {
-
+						// 8. Thêm dữ liệu vào listItem theo định dạng các shell
 						cell = cellIterator.next();
 						switch (cell.getCellType()) {
-
 						case STRING:
 							String value = "";
 							value = cell.getStringCellValue().replaceAll("'", "");
@@ -301,25 +301,13 @@ public class ExtractFile {
 						case BOOLEAN:
 							listItem += "'" + cell.getBooleanCellValue() + "'";
 							break;
-//						case _NONE:
-//							listItem += "'null'";
-//							break;
-//						case BLANK:
-//							listItem += "'null'";
-//							break;
-//						case ERROR:
-//							listItem += "'null'";
-//							break;
-//						case FORMULA:
-//							listItem += "'null'";
-//							break;
 
 						default:
 							listItem += "'null'";
 							break;
 						}
 						if (cell.getColumnIndex() == number_column - 2) {
-							// bỏ dấu phẩy cuối
+							// 9. bỏ dấu phẩy shell cuối
 							listItem += "";
 						} else
 							listItem += ",";
@@ -327,13 +315,15 @@ public class ExtractFile {
 						listItem += "'null'";
 				}
 				listItem += ")\n";
+				// 10. thêm từng hàng vào trong danh sách
 				list.add(listItem);
 			}
 		}
-		// 9.2.4: Bỏ phần header
+		// 11: Bỏ phần header
 		list.remove(0);
 
-		// 9.2.5: Add tất cả sinh viên theo định dạng câu lệnh insert sql
+		// 12: Add tất cả sinh viên theo định dạng câu lệnh insert sql, nếu có dòng null
+		// thì xóa dòng đó khỏi danh sách
 		String sqlList = "";
 		for (int i = 0; i < list.size(); i++) {
 			String[] arr = list.get(i).split(",");
@@ -343,9 +333,10 @@ public class ExtractFile {
 			}
 			sqlList += list.get(i) + ",";
 		}
+		//13.Bỏ dấu phẩy ở cuối danh sách dữ liệu
 		sqlList = sqlList.substring(0, sqlList.lastIndexOf(","));
 
-		// 9.2.6: Đóng file
+		// 14: Đóng file, trả về danh sách dữ liệu
 		workBook.close();
 		return sqlList;
 	}
